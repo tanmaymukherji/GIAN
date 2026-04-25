@@ -12,7 +12,8 @@ const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? Deno.env.get
 const cronToken = Deno.env.get("GIAN_DIRECTORY_SYNC_CRON_TOKEN") ?? "";
 const gianBaseUrl = "https://gian.org";
 const gianListingUrl = `${gianBaseUrl}/multimedia-database/`;
-const MAX_CONTACT_ENRICHMENTS_PER_RUN = 6;
+const MAX_CONTACT_ENRICHMENTS_PER_RUN = 2;
+const MAX_INNOVATIONS_PER_RUN = 8;
 const STALE_RUN_MINUTES = 20;
 let supabaseClient: ReturnType<typeof createClient> | null = null;
 
@@ -589,6 +590,44 @@ async function handleListGianSyncRuns(token: string) {
   return jsonResponse({ items: data ?? [] });
 }
 
+async function getSyncState() {
+  const supabase = getSupabaseAdmin();
+  const { data, error } = await supabase
+    .from("gian_sync_state")
+    .select("*")
+    .eq("state_key", "default")
+    .maybeSingle();
+  if (error) throw new Error(`Could not load GIAN sync state: ${error.message}`);
+  if (data) return data;
+  const { data: inserted, error: insertError } = await supabase
+    .from("gian_sync_state")
+    .insert({ state_key: "default", next_offset: 0, last_total: 0 })
+    .select("*")
+    .single();
+  if (insertError || !inserted) throw new Error(`Could not initialize GIAN sync state: ${insertError?.message || "unknown error"}`);
+  return inserted;
+}
+
+async function updateSyncState(values: Record<string, unknown>) {
+  const supabase = getSupabaseAdmin();
+  const { error } = await supabase
+    .from("gian_sync_state")
+    .upsert({
+      state_key: "default",
+      updated_at: new Date().toISOString(),
+      ...values,
+    }, { onConflict: "state_key" });
+  if (error) throw new Error(`Could not update GIAN sync state: ${error.message}`);
+}
+
+function sliceBatch<T>(items: T[], offset: number, batchSize: number) {
+  if (!items.length) return [];
+  const normalizedOffset = ((offset % items.length) + items.length) % items.length;
+  const primary = items.slice(normalizedOffset, normalizedOffset + batchSize);
+  if (primary.length >= batchSize || primary.length === items.length) return primary;
+  return [...primary, ...items.slice(0, Math.min(batchSize - primary.length, normalizedOffset))];
+}
+
 function pickPrimaryAddress(parsed: ParsedInnovation, enriched: ContactEnrichment) {
   return normalizeLocationValue(enriched.address || parsed.addresses[0] || parsed.location);
 }
@@ -600,14 +639,20 @@ function buildVendorId(parsed: ParsedInnovation) {
 async function runGianSync(requestedBy: string) {
   const supabase = getSupabaseAdmin();
   await markStaleRunningSyncs();
+  const syncState = await getSyncState();
   const { data: runData, error: runError } = await supabase.from("gian_sync_runs").insert({ status: "running", requested_by: requestedBy, started_at: new Date().toISOString() }).select("id").single();
   if (runError || !runData?.id) throw new Error("GIAN sync run could not be created.");
   const runId = String(runData.id);
 
   try {
     const listingItems = await scrapeAllListings();
+    const selectedListings = sliceBatch(listingItems, Number(syncState.next_offset || 0), MAX_INNOVATIONS_PER_RUN);
+    await updateSyncState({
+      last_started_at: new Date().toISOString(),
+      last_total: listingItems.length,
+    });
     let enrichmentCount = 0;
-    const parsedInnovations = await mapLimit(listingItems, 4, async (listingItem) => {
+    const parsedInnovations = await mapLimit(selectedListings, 4, async (listingItem) => {
       const html = await fetchText(listingItem.detailUrl);
       const parsed = parseDetailsPage(listingItem, html);
       const shouldEnrich =
@@ -747,6 +792,14 @@ async function runGianSync(requestedBy: string) {
 
     await upsertInBatches("gian_innovators", vendorRows, "portal_vendor_id", 50);
     await upsertInBatches("gian_innovations", productRows, "portal_product_id", 50);
+    const nextOffset = listingItems.length
+      ? (Number(syncState.next_offset || 0) + selectedListings.length) % listingItems.length
+      : 0;
+    await updateSyncState({
+      next_offset: nextOffset,
+      last_total: listingItems.length,
+      last_finished_at: new Date().toISOString(),
+    });
 
     await supabase.from("gian_sync_runs").update({
       status: "success",
@@ -759,6 +812,9 @@ async function runGianSync(requestedBy: string) {
     return { vendorCount: vendorRows.length, productCount: productRows.length };
   } catch (error) {
     const message = error instanceof Error ? error.message : "GIAN directory sync failed.";
+    await updateSyncState({
+      last_finished_at: new Date().toISOString(),
+    }).catch(() => null);
     await supabase.from("gian_sync_runs").update({
       status: "failed",
       finished_at: new Date().toISOString(),
