@@ -12,6 +12,7 @@ const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? Deno.env.get
 const cronToken = Deno.env.get("GIAN_DIRECTORY_SYNC_CRON_TOKEN") ?? "";
 const gianBaseUrl = "https://gian.org";
 const gianListingUrl = `${gianBaseUrl}/multimedia-database/`;
+const MAX_CONTACT_ENRICHMENTS_PER_RUN = 6;
 let supabaseClient: ReturnType<typeof createClient> | null = null;
 
 type ListingItem = {
@@ -586,16 +587,23 @@ async function runGianSync(requestedBy: string) {
 
   try {
     const listingItems = await scrapeAllListings();
+    let enrichmentCount = 0;
     const parsedInnovations = await mapLimit(listingItems, 4, async (listingItem) => {
       const html = await fetchText(listingItem.detailUrl);
       const parsed = parseDetailsPage(listingItem, html);
-      const enriched = (!parsed.emails.length || !parsed.phones.length) ? await searchPublicWebForContacts(parsed) : {
+      const shouldEnrich =
+        (!parsed.emails.length || !parsed.phones.length)
+        && enrichmentCount < MAX_CONTACT_ENRICHMENTS_PER_RUN;
+      if (shouldEnrich) enrichmentCount += 1;
+      const enriched = shouldEnrich ? await searchPublicWebForContacts(parsed) : {
         email: parsed.emails[0] || null,
         phone: parsed.phones[0] || null,
         address: parsed.addresses[0] || null,
         sourceUrl: parsed.detailUrl,
-        sourceLabel: "GIAN detail page",
-        notes: "Contact details captured directly from GIAN where available.",
+        sourceLabel: parsed.emails.length || parsed.phones.length ? "GIAN detail page" : "GIAN detail page only",
+        notes: parsed.emails.length || parsed.phones.length
+          ? "Contact details captured directly from GIAN where available."
+          : "No direct contact found on GIAN for this record in this run. Public web enrichment is limited per sync to keep the job within edge runtime limits.",
       };
       return { parsed, enriched };
     });

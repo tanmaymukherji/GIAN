@@ -139,8 +139,14 @@ window.InnovationStore = (() => {
       },
       body: JSON.stringify({ action, ...payload })
     });
-    const data = await response.json().catch(() => null);
-    if (!response.ok) throw new Error(data?.error || 'Admin request failed.');
+    const rawText = await response.text().catch(() => '');
+    let data = null;
+    try {
+      data = rawText ? JSON.parse(rawText) : null;
+    } catch {}
+    if (!response.ok) {
+      throw new Error(data?.error || rawText || `Admin request failed (${response.status}).`);
+    }
     return data;
   }
 
