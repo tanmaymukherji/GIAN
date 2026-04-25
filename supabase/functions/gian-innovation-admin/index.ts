@@ -14,7 +14,7 @@ const gianBaseUrl = "https://gian.org";
 const gianListingUrl = `${gianBaseUrl}/multimedia-database/`;
 const MAX_CONTACT_ENRICHMENTS_PER_RUN = 2;
 const MAX_INNOVATIONS_PER_RUN = 8;
-const STALE_RUN_MINUTES = 20;
+const STALE_RUN_MINUTES = 2;
 let supabaseClient: ReturnType<typeof createClient> | null = null;
 
 type ListingItem = {
