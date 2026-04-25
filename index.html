@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <link rel="icon" href="data:," />
-  <title>Innovation Guild Machine Directory</title>
+  <title>GIAN Grassroots Innovation Directory</title>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="./config.js"></script>
   <link rel="stylesheet" href="./styles.css" />
@@ -13,9 +13,9 @@
   <div class="vendor-shell">
     <header class="vendor-hero">
       <div>
-        <p class="vendor-kicker">Innovation Guild Directory</p>
-        <h1>Organization and Machine Search</h1>
-        <p class="vendor-subtitle">Search synced Innovation Guild organizations, machines, specifications, keywords, and service locations with the same public search and map workflow used in the SELCO directory.</p>
+        <p class="vendor-kicker">GIAN Grassroots Innovation Directory</p>
+        <h1>Innovation and Innovator Search</h1>
+        <p class="vendor-subtitle">Search the synced GIAN multimedia database by innovation, innovator, location, or keyword with the same map, popup, scroll, and admin workflow used in the SELCO project.</p>
       </div>
     </header>
 
@@ -23,11 +23,10 @@
       <aside class="vendor-sidebar">
         <section class="section">
           <h3>Search Filters</h3>
-          <div class="form-group"><label for="search-supplier">Organisation</label><select id="search-supplier"><option value="">All organisations</option></select></div>
-          <div class="form-group"><label for="search-product">Machine</label><select id="search-product"><option value="">All machines</option></select></div>
-          <div class="form-group"><label for="search-tags">Specifications</label><input id="search-tags" type="search" placeholder="Search tags, categories, specifications" /></div>
-          <div class="form-group"><label for="search-location">Location</label><input id="search-location" type="search" placeholder="City, state, service region" /></div>
-          <div class="form-group"><label for="search-keyword">Keyword</label><input id="search-keyword" type="search" placeholder="Any keyword" /></div>
+          <div class="form-group"><label for="search-supplier">Innovator Name</label><select id="search-supplier"><option value="">All innovators</option></select></div>
+          <div class="form-group"><label for="search-product">Name of Innovation</label><select id="search-product"><option value="">All innovations</option></select></div>
+          <div class="form-group"><label for="search-location">Location</label><select id="search-location"><option value="">All locations</option></select></div>
+          <div class="form-group"><label for="search-keyword">Keyword</label><input id="search-keyword" type="search" placeholder="Innovation details, tags, contact, media" /></div>
           <div class="btn-group">
             <button class="btn" id="run-search" type="button">Search</button>
             <button class="btn btn-danger btn-small" id="clear-search" type="button">Clear</button>
@@ -37,11 +36,11 @@
         <section class="section">
           <h3>Directory Summary</h3>
           <div class="stats-grid">
-            <div class="stat-card"><div class="stat-number" id="vendor-total-count">0</div><div>Organizations</div></div>
-            <div class="stat-card"><div class="stat-number" id="product-total-count">0</div><div>Machines</div></div>
+            <div class="stat-card"><div class="stat-number" id="vendor-total-count">0</div><div>Innovators</div></div>
+            <div class="stat-card"><div class="stat-number" id="product-total-count">0</div><div>Innovations</div></div>
             <div class="stat-card"><div class="stat-number" id="filtered-vendor-count">0</div><div>Matches</div></div>
           </div>
-          <p class="section-note" id="directory-status">Loading Innovation Guild directory...</p>
+          <p class="section-note" id="directory-status">Loading GIAN directory...</p>
         </section>
       </aside>
 
@@ -50,7 +49,7 @@
           <div class="vendor-results-header">
             <div>
               <h3>Map Results</h3>
-              <p class="section-note">The map follows the current result page. Click a flag or marker to focus that organization and open its details.</p>
+              <p class="section-note">Orange dots mark mapped innovator locations. Click a marker or row to focus that innovator and open the matching detail pages.</p>
             </div>
           </div>
           <div class="vendor-map-grid">
@@ -62,7 +61,7 @@
         <div class="section">
           <div class="vendor-results-header">
             <div>
-              <h3>Organization Results</h3>
+              <h3>Innovation Results</h3>
               <p class="section-note" id="results-summary">No results loaded yet.</p>
             </div>
           </div>

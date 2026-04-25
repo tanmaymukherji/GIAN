@@ -8,7 +8,7 @@ const innovationSyncRuns = document.getElementById('innovationSyncRuns');
 const runInnovationSyncButton = document.getElementById('runInnovationSync');
 const signOutButton = document.getElementById('signOutButton');
 
-const ADMIN_SESSION_KEY = 'innovation-guild-admin-session';
+const ADMIN_SESSION_KEY = 'gian-innovation-admin-session';
 
 function setStatus(element, message, isError = false) {
   element.textContent = message;
@@ -42,13 +42,13 @@ function updateSessionUi(isSignedIn) {
 function renderInnovationSyncRuns(items) {
   innovationSyncRuns.innerHTML = '';
   if (!items.length) {
-    innovationSyncRuns.innerHTML = '<article class="admin-card"><p>No Innovation Guild sync runs yet.</p></article>';
+    innovationSyncRuns.innerHTML = '<article class="admin-card"><p>No GIAN sync runs yet.</p></article>';
     return;
   }
   items.forEach((item) => {
     const card = document.createElement('article');
     card.className = 'admin-card';
-    card.innerHTML = `<div class="admin-card-header"><h4>${escapeHtml(item.status || 'unknown')}</h4><span class="admin-badge ${item.status === 'success' ? 'approved' : ''}">${escapeHtml(item.status || 'unknown')}</span></div><p><strong>Requested By:</strong> ${escapeHtml(item.requested_by || 'Unknown')}</p><p><strong>Started:</strong> ${escapeHtml(formatDate(item.started_at || item.created_at))}</p><p><strong>Finished:</strong> ${escapeHtml(formatDate(item.finished_at))}</p><p><strong>Organizations:</strong> ${escapeHtml(String(item.vendor_count || 0))}</p><p><strong>Machines:</strong> ${escapeHtml(String(item.product_count || 0))}</p><p><strong>Error:</strong> ${escapeHtml(item.error_message || 'None')}</p></article>`;
+    card.innerHTML = `<div class="admin-card-header"><h4>${escapeHtml(item.status || 'unknown')}</h4><span class="admin-badge ${item.status === 'success' ? 'approved' : ''}">${escapeHtml(item.status || 'unknown')}</span></div><p><strong>Requested By:</strong> ${escapeHtml(item.requested_by || 'Unknown')}</p><p><strong>Started:</strong> ${escapeHtml(formatDate(item.started_at || item.created_at))}</p><p><strong>Finished:</strong> ${escapeHtml(formatDate(item.finished_at))}</p><p><strong>Innovators:</strong> ${escapeHtml(String(item.vendor_count || 0))}</p><p><strong>Innovations:</strong> ${escapeHtml(String(item.product_count || 0))}</p><p><strong>Error:</strong> ${escapeHtml(item.error_message || 'None')}</p></article>`;
     innovationSyncRuns.appendChild(card);
   });
 }
@@ -79,26 +79,26 @@ async function loadInnovationSyncRuns() {
     innovationSyncRuns.innerHTML = '';
     return;
   }
-  innovationSyncMeta.textContent = 'Loading Innovation Guild sync history...';
+  innovationSyncMeta.textContent = 'Loading GIAN sync history...';
   try {
-    const data = await InnovationStore.adminRequest('listInnovationSyncRuns', { token });
+    const data = await InnovationStore.adminRequest('listGianSyncRuns', { token });
     const items = Array.isArray(data?.items) ? data.items : [];
-    innovationSyncMeta.textContent = `${items.length} Innovation Guild sync run${items.length === 1 ? '' : 's'} recorded`;
+    innovationSyncMeta.textContent = `${items.length} GIAN sync run${items.length === 1 ? '' : 's'} recorded`;
     renderInnovationSyncRuns(items);
   } catch (error) {
-    innovationSyncMeta.textContent = error.message || 'Innovation Guild sync history could not be loaded.';
+    innovationSyncMeta.textContent = error.message || 'GIAN sync history could not be loaded.';
   }
 }
 
 async function runInnovationSync() {
   runInnovationSyncButton.disabled = true;
-  setStatus(sessionStatus, 'Running Innovation Guild directory sync...');
+  setStatus(sessionStatus, 'Running GIAN directory sync...');
   try {
-    const data = await InnovationStore.adminRequest('syncInnovationGuildDirectory', { token: getStoredToken() });
-    setStatus(sessionStatus, `Innovation Guild sync completed: ${data.vendorCount || 0} organizations and ${data.productCount || 0} machines.`);
+    const data = await InnovationStore.adminRequest('syncGianDirectory', { token: getStoredToken() });
+    setStatus(sessionStatus, `GIAN sync completed: ${data.vendorCount || 0} innovators and ${data.productCount || 0} innovations.`);
     await loadInnovationSyncRuns();
   } catch (error) {
-    setStatus(sessionStatus, error.message || 'Innovation Guild sync failed.', true);
+    setStatus(sessionStatus, error.message || 'GIAN sync failed.', true);
   } finally {
     runInnovationSyncButton.disabled = false;
   }

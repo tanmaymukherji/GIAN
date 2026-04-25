@@ -1,0 +1,21 @@
+name: Sync GIAN Directory
+
+on:
+  schedule:
+    - cron: '30 1,13 * * *'
+  workflow_dispatch:
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger GIAN sync
+        env:
+          GIAN_SYNC_URL: ${{ secrets.GIAN_SYNC_URL }}
+          GIAN_SYNC_TOKEN: ${{ secrets.GIAN_SYNC_TOKEN }}
+        run: |
+          test -n "$GIAN_SYNC_URL"
+          test -n "$GIAN_SYNC_TOKEN"
+          curl --fail-with-body -X POST "$GIAN_SYNC_URL" \
+            -H "Content-Type: application/json" \
+            -d "{\"action\":\"scheduledSync\",\"cronToken\":\"$GIAN_SYNC_TOKEN\"}"

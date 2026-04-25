@@ -1,29 +1,32 @@
-# Innovation Guild Directory
+# GIAN Grassroots Innovation Directory
 
-Standalone Innovation Guild organization and machine directory with a SELCO-style public search flow.
+Standalone GIAN multimedia database directory with a SELCO-style public search flow, MapmyIndia results, admin sync, and scheduled refresh support.
 
 Project folder:
-`C:\github\innovation-guild-directory`
+`C:\github\gian-innovation-directory`
 
 Included app surfaces:
 - Public search page: `index.html`
-- Organization detail page: `vendor-detail.html`
-- Machine detail page: `product-detail.html`
+- Innovator detail page: `vendor-detail.html`
+- Innovation detail page: `product-detail.html`
 - Admin-triggered sync page: `admin.html`
 - Shared Supabase loader: `innovation-store.js`
-- Supabase migration: `supabase/migrations/20260425150000_create_innovation_guild_directory.sql`
-- Supabase edge function: `supabase/functions/innovation-guild-admin/index.ts`
+- Supabase migration: `supabase/migrations/20260425193000_create_gian_innovation_directory.sql`
+- Supabase edge function: `supabase/functions/gian-innovation-admin/index.ts`
+- Scheduled sync workflow: `.github/workflows/sync-gian-directory.yml`
 
 Implementation notes:
-- Organizations are normalized into vendor-style records so this dataset stays structurally parallel with SELCO and future ASKGRE cross-mapping.
-- Machines are normalized into product-style records with specifications, galleries, and embedded video URLs.
-- Contact fields are stored on the organization row using the same names as SELCO. The Innovation Guild API exposes reliable address/location data but not organization email/phone, so the sync also supports optional enrichment through `organization-contact-seed.json`.
+- Innovators are normalized into vendor-style rows so the UI and admin controls stay parallel with the SELCO project.
+- Innovations are normalized into product-style rows with innovation details, images, multimedia links, and tags.
+- The sync scrapes `https://gian.org/multimedia-database/` and then does best-effort public web enrichment for missing email, phone, and address details.
+- Map markers use the shared MapmyIndia interaction model and are styled as orange dots for GIAN.
 
 Deployment:
 - GitHub Pages deploys automatically from `.github/workflows/deploy-pages.yml`
 - The static frontend uses the configured Supabase URL and anon key in `config.js`
-- Add a `MAPMYINDIA_MAP_KEY` in `config.js` to enable the live blue-pin map
+- Set `MAPMYINDIA_MAP_KEY` in `config.js` to enable the live map
 
-Backend requirement:
-- The `innovation-guild-admin` edge function reads the existing `SELCO_VENDOR_SERVICE_ROLE_KEY` secret for Supabase service-role access
-- Optionally set `INNOVATION_GUILD_APP_AUTHORIZATION` if you want to override the bundled Innovation Guild app authorization header
+Backend requirements:
+- The `gian-innovation-admin` edge function reads `SUPABASE_SERVICE_ROLE_KEY` and falls back to `SELCO_VENDOR_SERVICE_ROLE_KEY`
+- Set `GIAN_DIRECTORY_SYNC_CRON_TOKEN` on Supabase and match it with the GitHub secret `GIAN_SYNC_TOKEN`
+- Set the GitHub secret `GIAN_SYNC_URL` to the deployed function endpoint, for example `https://<project-ref>.supabase.co/functions/v1/gian-innovation-admin`

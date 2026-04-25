@@ -1,7 +1,7 @@
 window.InnovationStore = (() => {
-  const VENDORS_TABLE = () => (window.APP_CONFIG && window.APP_CONFIG.INNOVATION_GUILD_VENDORS_TABLE) || 'innovation_guild_vendors';
-  const PRODUCTS_TABLE = () => (window.APP_CONFIG && window.APP_CONFIG.INNOVATION_GUILD_PRODUCTS_TABLE) || 'innovation_guild_products';
-  const ADMIN_API_URL = () => `${String(window.APP_CONFIG?.SUPABASE_URL || '').replace(/\/$/, '')}/functions/v1/innovation-guild-admin`;
+  const VENDORS_TABLE = () => (window.APP_CONFIG && window.APP_CONFIG.GIAN_INNOVATORS_TABLE) || 'gian_innovators';
+  const PRODUCTS_TABLE = () => (window.APP_CONFIG && window.APP_CONFIG.GIAN_INNOVATIONS_TABLE) || 'gian_innovations';
+  const ADMIN_API_URL = () => `${String(window.APP_CONFIG?.SUPABASE_URL || '').replace(/\/$/, '')}/functions/v1/gian-innovation-admin`;
   let client = null;
 
   function normalizeText(value) {
@@ -77,6 +77,8 @@ window.InnovationStore = (() => {
         mergedVendor.longitude = choosePreferredNumber(mergedVendor.longitude, vendor.longitude);
         mergedVendor.tags = uniqueValues([...(mergedVendor.tags || []), ...(vendor.tags || [])]);
         mergedVendor.service_locations = uniqueValues([...(mergedVendor.service_locations || []), ...(vendor.service_locations || [])]);
+        mergedVendor.innovator_image_urls = uniqueValues([...(mergedVendor.innovator_image_urls || []), ...(vendor.innovator_image_urls || [])]);
+        mergedVendor.innovator_media_urls = uniqueValues([...(mergedVendor.innovator_media_urls || []), ...(vendor.innovator_media_urls || [])]);
         mergedVendor.alias_vendor_ids = uniqueValues([...(mergedVendor.alias_vendor_ids || []), vendor.portal_vendor_id]);
         mergedProducts.push(...(productsByVendorId.get(vendor.portal_vendor_id) || []));
       });
