@@ -14,7 +14,7 @@
       <div>
         <p class="vendor-kicker">GIAN Grassroots Innovation Directory</p>
         <h1>Admin Sync</h1>
-        <p class="vendor-subtitle">Run a manual sync that scrapes GIAN innovations, innovator profiles, media, tags, geocodes, and public contact enrichment into Supabase.</p>
+        <p class="vendor-subtitle">Run a manual sync to add only brand-new GIAN records. Existing records stay unchanged unless edited here by admin.</p>
       </div>
       <div class="vendor-hero-actions">
         <a class="btn btn-small" href="./index.html">Open Search</a>
@@ -32,8 +32,9 @@
 
         <div id="sessionPanel" class="session-panel">
           <h3>Admin Controls</h3>
+          <p class="section-note">Manual sync only inserts new records. Existing innovator records are preserved for manual admin editing.</p>
           <div class="btn-group">
-            <button class="btn btn-success" type="button" id="runInnovationSync">Run Directory Sync</button>
+            <button class="btn btn-success" type="button" id="runInnovationSync">Run New Records Sync</button>
             <button class="btn btn-danger btn-small" type="button" id="signOutButton">Sign Out</button>
           </div>
           <p class="admin-status" id="sessionStatus"></p>
@@ -44,6 +45,40 @@
         <h3>Sync History</h3>
         <p class="admin-helper" id="innovationSyncMeta">Sign in as admin to view and run sync operations.</p>
         <div class="admin-card-list" id="innovationSyncRuns"></div>
+      </section>
+
+      <section class="section queue-panel" id="adminEditorPanel">
+        <h3>Innovator Editor</h3>
+        <p class="section-note">Search innovators or innovation names, then update contact and profile fields manually.</p>
+        <div class="form-group">
+          <label for="adminSearchInput">Search Innovators</label>
+          <input id="adminSearchInput" type="search" placeholder="Search by innovator, innovation, location, email, phone, or keyword" />
+        </div>
+        <p class="admin-helper" id="adminSearchMeta">Sign in as admin to search and edit innovator records.</p>
+        <div class="admin-editor-layout">
+          <div class="admin-card-list" id="adminSearchResults"></div>
+          <form class="admin-form admin-editor-form" id="adminEditForm">
+            <input id="editVendorId" type="hidden" />
+            <div class="admin-editor-empty" id="adminEditorEmpty">Select an innovator from the search results to edit contact and profile information.</div>
+            <div id="adminEditorFields" class="admin-editor-fields">
+              <div class="form-group"><label for="editVendorName">Innovator Name</label><input id="editVendorName" type="text" /></div>
+              <div class="form-group"><label for="editPortalContactName">Contact Name</label><input id="editPortalContactName" type="text" /></div>
+              <div class="form-group"><label for="editLocationText">Location</label><input id="editLocationText" type="text" /></div>
+              <div class="form-group"><label for="editFinalContactEmail">Final Email</label><input id="editFinalContactEmail" type="email" /></div>
+              <div class="form-group"><label for="editFinalContactPhone">Final Phone</label><input id="editFinalContactPhone" type="text" /></div>
+              <div class="form-group"><label for="editFinalContactAddress">Final Address</label><textarea id="editFinalContactAddress" rows="3"></textarea></div>
+              <div class="form-group"><label for="editWebsiteDetails">Website / Details URL</label><input id="editWebsiteDetails" type="url" /></div>
+              <div class="form-group"><label for="editContactSourceUrl">Contact Source URL</label><input id="editContactSourceUrl" type="url" /></div>
+              <div class="form-group"><label for="editWebsiteStatus">Contact Status</label><input id="editWebsiteStatus" type="text" /></div>
+              <div class="form-group"><label for="editAboutVendor">Innovator Profile</label><textarea id="editAboutVendor" rows="5"></textarea></div>
+              <div class="form-group"><label for="editContactNotes">Admin Notes</label><textarea id="editContactNotes" rows="5"></textarea></div>
+              <div class="btn-group">
+                <button class="btn btn-success" type="submit" id="saveInnovatorButton">Save Changes</button>
+              </div>
+              <p class="admin-status" id="adminEditStatus"></p>
+            </div>
+          </form>
+        </div>
       </section>
     </main>
   </div>

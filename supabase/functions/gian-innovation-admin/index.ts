@@ -9,13 +9,25 @@ const corsHeaders = {
 
 const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
 const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? Deno.env.get("SELCO_VENDOR_SERVICE_ROLE_KEY") ?? "";
-const cronToken = Deno.env.get("GIAN_DIRECTORY_SYNC_CRON_TOKEN") ?? "";
 const gianBaseUrl = "https://gian.org";
 const gianListingUrl = `${gianBaseUrl}/multimedia-database/`;
 const MAX_CONTACT_ENRICHMENTS_PER_RUN = 2;
 const MAX_INNOVATIONS_PER_RUN = 8;
 const STALE_RUN_MINUTES = 2;
 let supabaseClient: ReturnType<typeof createClient> | null = null;
+const EDITABLE_VENDOR_FIELDS = [
+  "vendor_name",
+  "portal_contact_name",
+  "location_text",
+  "final_contact_email",
+  "final_contact_phone",
+  "final_contact_address",
+  "website_details",
+  "contact_source_url",
+  "website_status",
+  "about_vendor",
+  "contact_notes",
+] as const;
 
 type ListingItem = {
   detailUrl: string;
@@ -188,6 +200,14 @@ function extractAddressCandidate(text: string, location: string) {
     if ((hasPin || hasLocation) && line.includes(",")) return line;
   }
   return null;
+}
+
+function innovationSlugFromUrl(detailUrl: string) {
+  try {
+    return slugify(new URL(detailUrl).pathname.split("/").filter(Boolean).pop() || detailUrl);
+  } catch {
+    return slugify(detailUrl);
+  }
 }
 
 async function fetchText(url: string) {
@@ -554,14 +574,23 @@ async function mapLimit<T, R>(items: T[], batchSize: number, worker: (item: T) =
   return results;
 }
 
-async function upsertInBatches(table: string, rows: Record<string, unknown>[], onConflict: string, batchSize: number) {
+async function insertInBatches(table: string, rows: Record<string, unknown>[], batchSize: number) {
   const supabase = getSupabaseAdmin();
   for (let index = 0; index < rows.length; index += batchSize) {
     const batch = rows.slice(index, index + batchSize);
     if (!batch.length) continue;
-    const { error } = await supabase.from(table).upsert(batch, { onConflict });
-    if (error) throw new Error(`${table} upsert failed: ${error.message}`);
+    const { error } = await supabase.from(table).insert(batch);
+    if (error) throw new Error(`${table} insert failed: ${error.message}`);
   }
+}
+
+async function loadExistingIds(table: string, column: string, values: string[]) {
+  const supabase = getSupabaseAdmin();
+  const uniqueValues = dedupe(values);
+  if (!uniqueValues.length) return new Set<string>();
+  const { data, error } = await supabase.from(table).select(column).in(column, uniqueValues);
+  if (error) throw new Error(`Could not load existing ${table} ids: ${error.message}`);
+  return new Set((data ?? []).map((item) => requireString(item[column as keyof typeof item])));
 }
 
 async function markStaleRunningSyncs() {
@@ -588,6 +617,31 @@ async function handleListGianSyncRuns(token: string) {
   const { data, error } = await supabase.from("gian_sync_runs").select("*").order("created_at", { ascending: false }).limit(10);
   if (error) return errorResponse("GIAN sync runs could not be loaded.", 500);
   return jsonResponse({ items: data ?? [] });
+}
+
+async function handleUpdateGianInnovator(token: string, portalVendorId: string, updates: Record<string, unknown>) {
+  const supabase = getSupabaseAdmin();
+  const session = await validateSession(token);
+  if (!session) return errorResponse("Invalid admin session.", 401);
+  if (!portalVendorId) return errorResponse("Missing innovator id.", 400);
+
+  const cleanUpdates: Record<string, unknown> = {};
+  for (const field of EDITABLE_VENDOR_FIELDS) {
+    if (!(field in updates)) continue;
+    const value = requireString(updates[field]);
+    cleanUpdates[field] = value || null;
+  }
+  if (!Object.keys(cleanUpdates).length) return errorResponse("No valid fields were provided for update.", 400);
+
+  cleanUpdates.updated_at = new Date().toISOString();
+  const { data, error } = await supabase
+    .from("gian_innovators")
+    .update(cleanUpdates)
+    .eq("portal_vendor_id", portalVendorId)
+    .select("*")
+    .single();
+  if (error) return errorResponse(`Innovator update failed: ${error.message}`, 500);
+  return jsonResponse({ ok: true, item: data });
 }
 
 async function getSyncState() {
@@ -647,12 +701,37 @@ async function runGianSync(requestedBy: string) {
   try {
     const listingItems = await scrapeAllListings();
     const selectedListings = sliceBatch(listingItems, Number(syncState.next_offset || 0), MAX_INNOVATIONS_PER_RUN);
+    const existingProductIds = await loadExistingIds(
+      "gian_innovations",
+      "portal_product_id",
+      selectedListings.map((item) => innovationSlugFromUrl(item.detailUrl)),
+    );
+    const listingsToInsert = selectedListings.filter((item) => !existingProductIds.has(innovationSlugFromUrl(item.detailUrl)));
     await updateSyncState({
       last_started_at: new Date().toISOString(),
       last_total: listingItems.length,
     });
+    if (!listingsToInsert.length) {
+      const nextOffset = listingItems.length
+        ? (Number(syncState.next_offset || 0) + selectedListings.length) % listingItems.length
+        : 0;
+      await updateSyncState({
+        next_offset: nextOffset,
+        last_total: listingItems.length,
+        last_finished_at: new Date().toISOString(),
+      });
+      await supabase.from("gian_sync_runs").update({
+        status: "success",
+        finished_at: new Date().toISOString(),
+        vendor_count: 0,
+        product_count: 0,
+        error_message: "No new GIAN records were found in this batch. Existing records were left unchanged.",
+        updated_at: new Date().toISOString(),
+      }).eq("id", runId);
+      return { vendorCount: 0, productCount: 0 };
+    }
     let enrichmentCount = 0;
-    const parsedInnovations = await mapLimit(selectedListings, 4, async (listingItem) => {
+    const parsedInnovations = await mapLimit(listingsToInsert, 4, async (listingItem) => {
       const html = await fetchText(listingItem.detailUrl);
       const parsed = parseDetailsPage(listingItem, html);
       const shouldEnrich =
@@ -776,7 +855,12 @@ async function runGianSync(requestedBy: string) {
       };
     }), (row) => requireString(row.portal_vendor_id));
 
-    const vendorRows = await mapLimit(rawVendorRows, 4, async (row) => {
+    const existingVendorIds = await loadExistingIds(
+      "gian_innovators",
+      "portal_vendor_id",
+      rawVendorRows.map((row) => requireString(row.portal_vendor_id)),
+    );
+    const vendorRows = await mapLimit(rawVendorRows.filter((row) => !existingVendorIds.has(requireString(row.portal_vendor_id))), 4, async (row) => {
       const geocoded = await geocodeAddressFallback(
         requireString(row.final_contact_address),
         requireString(row.state),
@@ -790,8 +874,8 @@ async function runGianSync(requestedBy: string) {
       };
     });
 
-    await upsertInBatches("gian_innovators", vendorRows, "portal_vendor_id", 50);
-    await upsertInBatches("gian_innovations", productRows, "portal_product_id", 50);
+    await insertInBatches("gian_innovators", vendorRows, 50);
+    await insertInBatches("gian_innovations", productRows, 50);
     const nextOffset = listingItems.length
       ? (Number(syncState.next_offset || 0) + selectedListings.length) % listingItems.length
       : 0;
@@ -806,6 +890,7 @@ async function runGianSync(requestedBy: string) {
       finished_at: new Date().toISOString(),
       vendor_count: vendorRows.length,
       product_count: productRows.length,
+      error_message: null,
       updated_at: new Date().toISOString(),
     }).eq("id", runId);
 
@@ -837,13 +922,8 @@ async function handleSyncGianDirectory(token: string) {
 }
 
 async function handleScheduledSync(receivedToken: string) {
-  if (!cronToken || receivedToken !== cronToken) return errorResponse("Invalid sync token.", 401);
-  try {
-    const result = await runGianSync("scheduler");
-    return jsonResponse({ ok: true, ...result });
-  } catch (error) {
-    return errorResponse(error instanceof Error ? error.message : "Scheduled sync failed.", 500);
-  }
+  if (receivedToken) return errorResponse("Scheduled sync is disabled. Run sync manually from the admin page.", 403);
+  return errorResponse("Scheduled sync is disabled. Run sync manually from the admin page.", 403);
 }
 
 Deno.serve(async (request) => {
@@ -858,6 +938,10 @@ Deno.serve(async (request) => {
   const token = requireString(body.token);
   const password = requireString(body.password);
   const receivedCronToken = requireString(body.cronToken);
+  const portalVendorId = requireString(body.portalVendorId);
+  const updates = (body.updates && typeof body.updates === "object" && !Array.isArray(body.updates))
+    ? body.updates as Record<string, unknown>
+    : {};
 
   switch (action) {
     case "login":
@@ -870,6 +954,8 @@ Deno.serve(async (request) => {
       return await handleListGianSyncRuns(token);
     case "syncGianDirectory":
       return await handleSyncGianDirectory(token);
+    case "updateGianInnovator":
+      return await handleUpdateGianInnovator(token, portalVendorId, updates);
     case "scheduledSync":
       return await handleScheduledSync(receivedCronToken);
     default:

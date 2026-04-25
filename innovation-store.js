@@ -128,6 +128,22 @@ window.InnovationStore = (() => {
     return merged;
   }
 
+  async function loadAdminRecords() {
+    const supabase = getClient();
+    const [vendorsResult, productsResult] = await Promise.all([
+      supabase.from(VENDORS_TABLE()).select('*').order('vendor_name'),
+      supabase.from(PRODUCTS_TABLE()).select('*').order('product_name')
+    ]);
+
+    if (vendorsResult.error) throw new Error(`Admin vendor load failed: ${vendorsResult.error.message}`);
+    if (productsResult.error) throw new Error(`Admin product load failed: ${productsResult.error.message}`);
+
+    return {
+      vendors: vendorsResult.data || [],
+      products: productsResult.data || []
+    };
+  }
+
   async function adminRequest(action, payload = {}) {
     const config = window.APP_CONFIG || {};
     const response = await fetch(ADMIN_API_URL(), {
@@ -150,5 +166,5 @@ window.InnovationStore = (() => {
     return data;
   }
 
-  return { loadDirectory, adminRequest };
+  return { loadDirectory, loadAdminRecords, adminRequest };
 })();
