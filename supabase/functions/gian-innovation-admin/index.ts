@@ -13,6 +13,7 @@ const cronToken = Deno.env.get("GIAN_DIRECTORY_SYNC_CRON_TOKEN") ?? "";
 const gianBaseUrl = "https://gian.org";
 const gianListingUrl = `${gianBaseUrl}/multimedia-database/`;
 const MAX_CONTACT_ENRICHMENTS_PER_RUN = 6;
+const STALE_RUN_MINUTES = 20;
 let supabaseClient: ReturnType<typeof createClient> | null = null;
 
 type ListingItem = {
@@ -562,10 +563,27 @@ async function upsertInBatches(table: string, rows: Record<string, unknown>[], o
   }
 }
 
+async function markStaleRunningSyncs() {
+  const supabase = getSupabaseAdmin();
+  const staleBefore = new Date(Date.now() - STALE_RUN_MINUTES * 60 * 1000).toISOString();
+  const { error } = await supabase
+    .from("gian_sync_runs")
+    .update({
+      status: "failed",
+      finished_at: new Date().toISOString(),
+      error_message: `Marked failed automatically after exceeding ${STALE_RUN_MINUTES} minutes in running state.`,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("status", "running")
+    .lt("started_at", staleBefore);
+  if (error) throw new Error(`Could not update stale GIAN sync runs: ${error.message}`);
+}
+
 async function handleListGianSyncRuns(token: string) {
   const supabase = getSupabaseAdmin();
   const session = await validateSession(token);
   if (!session) return errorResponse("Invalid admin session.", 401);
+  await markStaleRunningSyncs();
   const { data, error } = await supabase.from("gian_sync_runs").select("*").order("created_at", { ascending: false }).limit(10);
   if (error) return errorResponse("GIAN sync runs could not be loaded.", 500);
   return jsonResponse({ items: data ?? [] });
@@ -581,6 +599,7 @@ function buildVendorId(parsed: ParsedInnovation) {
 
 async function runGianSync(requestedBy: string) {
   const supabase = getSupabaseAdmin();
+  await markStaleRunningSyncs();
   const { data: runData, error: runError } = await supabase.from("gian_sync_runs").insert({ status: "running", requested_by: requestedBy, started_at: new Date().toISOString() }).select("id").single();
   if (runError || !runData?.id) throw new Error("GIAN sync run could not be created.");
   const runId = String(runData.id);
