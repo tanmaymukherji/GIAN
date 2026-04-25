@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, '..');
 const inputPath = path.resolve(repoRoot, '..', 'outputs', 'gian-scrape.json');
-const migrationPath = path.resolve(repoRoot, 'supabase', 'migrations', '20260425213000_seed_gian_initial_load.sql');
+const migrationPath = path.resolve(repoRoot, 'supabase', 'migrations', '20260425230000_refresh_gian_enriched_load_v2.sql');
 
 function cleanText(value) {
   return String(value || '')
@@ -25,6 +25,21 @@ function normalizeLocationValue(value) {
 
 function dedupe(values) {
   return [...new Set((values || []).map((value) => cleanText(value)).filter(Boolean))];
+}
+
+function normalizeVideoUrl(url) {
+  const value = cleanText(url);
+  if (!value) return '';
+  const youtubeId = value.match(/youtube\.com\/shorts\/([^?&#/]+)/i)?.[1]
+    || value.match(/youtube\.com\/watch\?v=([^?&#/]+)/i)?.[1]
+    || value.match(/youtu\.be\/([^?&#/]+)/i)?.[1]
+    || value.match(/youtube\.com\/embed\/([^?&#/]+)/i)?.[1];
+  if (youtubeId) return `https://www.youtube.com/embed/${youtubeId}`;
+  const vimeoId = value.match(/vimeo\.com\/(?:video\/)?(\d+)/i)?.[1];
+  if (vimeoId) return `https://player.vimeo.com/video/${vimeoId}`;
+  const loomId = value.match(/loom\.com\/(?:share|embed)\/([^?&#/]+)/i)?.[1];
+  if (loomId) return `https://www.loom.com/embed/${loomId}`;
+  return value;
 }
 
 function dedupeLocations(values) {
@@ -86,7 +101,7 @@ function buildSeed(data) {
       product_link: innovation.detail_url,
       product_image_url: innovation.innovation_images?.[0] || null,
       product_gallery_urls: innovation.innovation_images || [],
-      product_video_urls: innovation.multimedia_links || [],
+      product_video_urls: (innovation.multimedia_links || []).map(normalizeVideoUrl).filter(Boolean),
       product_location_text: innovation.location || null,
       product_categories: [],
       product_subcategories: [],
@@ -121,20 +136,20 @@ function buildSeed(data) {
       tags: [],
       portal_vendor_link: innovation.detail_url,
       portal_contact_name: innovation.innovator_name || 'Unknown Innovator',
-      portal_email: null,
-      portal_phone: null,
-      website_email: null,
-      website_phone: null,
-      website_address: null,
-      final_contact_email: null,
-      final_contact_phone: null,
-      final_contact_address: innovation.location || null,
-      contact_source_url: innovation.detail_url,
-      website_status: 'Imported from one-time local GIAN scrape',
+      portal_email: innovation.emails?.[0] || null,
+      portal_phone: innovation.phones?.[0] || null,
+      website_email: innovation.emails?.[0] || null,
+      website_phone: innovation.phones?.[0] || null,
+      website_address: innovation.addresses?.[0] || null,
+      final_contact_email: innovation.emails?.[0] || null,
+      final_contact_phone: innovation.phones?.[0] || null,
+      final_contact_address: innovation.addresses?.[0] || innovation.fallback_location || innovation.location || null,
+      contact_source_url: innovation.contact_source_urls?.[0] || innovation.detail_url,
+      website_status: innovation.emails?.length || innovation.phones?.length ? 'Imported with local web contact enrichment' : 'Imported from local GIAN scrape only',
       legacy_products_links: '',
-      contact_notes: 'Initial local scrape import. Contact enrichment can be added in a later pass.',
+      contact_notes: innovation.contact_search_notes || 'Imported from local GIAN scrape.',
       innovator_image_urls: innovation.innovator_images || [],
-      innovator_media_urls: innovation.multimedia_links || [],
+      innovator_media_urls: (innovation.multimedia_links || []).map(normalizeVideoUrl).filter(Boolean),
       latitude: Number.isFinite(Number(innovation.latitude)) ? Number(innovation.latitude) : null,
       longitude: Number.isFinite(Number(innovation.longitude)) ? Number(innovation.longitude) : null,
       products_count: 0,
@@ -143,13 +158,19 @@ function buildSeed(data) {
         innovator_name: innovation.innovator_name,
         location: innovation.location,
         detail_url: innovation.detail_url,
+        emails: innovation.emails || [],
+        phones: innovation.phones || [],
+        addresses: innovation.addresses || [],
+        fallback_location: innovation.fallback_location || innovation.location || '',
+        contact_source_urls: innovation.contact_source_urls || [],
       },
     };
     existing.tags = dedupe([...(existing.tags || []), ...(innovation.tags || [])]);
     existing.service_locations = dedupeLocations([...(existing.service_locations || []), innovation.location]);
     existing.innovator_image_urls = dedupe([...(existing.innovator_image_urls || []), ...(innovation.innovator_images || [])]);
-    existing.innovator_media_urls = dedupe([...(existing.innovator_media_urls || []), ...(innovation.multimedia_links || [])]);
+    existing.innovator_media_urls = dedupe([...(existing.innovator_media_urls || []), ...(innovation.multimedia_links || []).map(normalizeVideoUrl)]);
     existing.legacy_products_links = dedupe([existing.legacy_products_links, innovation.detail_url]).filter(Boolean).join('\n');
+    existing.website_details = innovation.website_url || existing.website_details;
     vendorMap.set(vendorId, existing);
   }
 

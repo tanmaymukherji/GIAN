@@ -513,7 +513,13 @@ function buildInnovationPreview(vendor) {
   if (!products.length) {
     return '<p><strong>Innovations:</strong> No innovations listed</p>';
   }
-  return `<div class="innovation-links-list">${products.map((product) => `<div><strong>${esc(product.product_name)}</strong><br/><a href="./product-detail.html?product=${encodeURIComponent(product.portal_product_id)}">View Details</a> | <a href="${esc(product.product_link || '#')}" target="_blank" rel="noreferrer">View on GIAN</a></div>`).join('')}</div>`;
+  return `<div class="innovation-links-list">${products.map((product) => `<div><strong>${esc(product.product_name)}</strong><br/><small>${esc(product.product_location_text || 'Location not listed')}</small></div>`).join('')}</div>`;
+}
+
+function buildResultVideo(vendor) {
+  const videoUrl = (vendor.products || []).flatMap((product) => product.product_video_urls || []).find((url) => /youtube\.com\/embed|player\.vimeo\.com|loom\.com\/embed/i.test(String(url || '')));
+  if (!videoUrl) return '';
+  return `<div class="innovation-result-video"><iframe class="innovation-video-frame" src="${esc(videoUrl)}" title="${esc(`${vendor.vendor_name} video`)}" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen loading="lazy" referrerpolicy="origin"></iframe></div>`;
 }
 
 async function renderResults() {
@@ -559,7 +565,7 @@ async function renderResults() {
     const addressLine = vendor.final_contact_address && normalizeText(vendor.final_contact_address) !== normalizeText(coverageSummary)
       ? `<p><strong>Address:</strong> ${esc(vendor.final_contact_address)}</p>`
       : '';
-    resultsEl.insertAdjacentHTML('beforeend', `<article class="vendor-result-card" data-vendor-card="${esc(vendor.portal_vendor_id)}"><div class="vendor-result-top"><div><h4>${esc(vendor.vendor_name)}</h4><p>${esc(coverageSummary)}</p></div><span class="admin-badge approved">${esc(String(vendor.products_count || vendor.products?.length || 0))} innovations</span></div><p>${esc(vendor.about_vendor || 'No description available.')}</p><p><strong>Locations:</strong> ${esc((vendor.service_locations || []).join(', ') || getPrimaryLocationLabel(vendor) || 'Not listed')}</p><p><strong>Contact:</strong> ${esc(contactLine)}</p>${addressLine}<p><strong>Enrichment:</strong> ${esc(noteLine)}</p><div><strong>Innovation Links</strong>${buildInnovationPreview(vendor)}</div><div class="btn-group"><a class="btn btn-small" href="./vendor-detail.html?vendor=${encodeURIComponent(vendor.portal_vendor_id)}">View Innovator</a><a class="btn btn-warning btn-small" href="${esc(vendor.portal_vendor_link || '#')}" target="_blank" rel="noreferrer">View on GIAN</a></div></article>`);
+    resultsEl.insertAdjacentHTML('beforeend', `<article class="vendor-result-card" data-vendor-card="${esc(vendor.portal_vendor_id)}"><div class="vendor-result-top"><div><h4>${esc(vendor.vendor_name)}</h4><p>${esc(coverageSummary)}</p></div><span class="admin-badge approved">${esc(String(vendor.products_count || vendor.products?.length || 0))} innovations</span></div><p>${esc(vendor.about_vendor || 'No description available.')}</p>${buildResultVideo(vendor)}<p><strong>Locations:</strong> ${esc((vendor.service_locations || []).join(', ') || getPrimaryLocationLabel(vendor) || 'Not listed')}</p><p><strong>Contact:</strong> ${esc(contactLine)}</p>${addressLine}<p><strong>Enrichment:</strong> ${esc(noteLine)}</p><div><strong>Innovation Preview</strong>${buildInnovationPreview(vendor)}</div><div class="btn-group"><a class="btn btn-small" href="./vendor-detail.html?vendor=${encodeURIComponent(vendor.portal_vendor_id)}">View Details</a><a class="btn btn-warning btn-small" href="${esc(vendor.portal_vendor_link || '#')}" target="_blank" rel="noreferrer">View on GIAN</a></div></article>`);
   });
 
   const selectedVendor = directoryState.selectedVendorId && mapVendors.some((vendor) => vendor.portal_vendor_id === directoryState.selectedVendorId)
