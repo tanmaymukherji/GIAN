@@ -157,10 +157,23 @@ function renderInnovationSyncRuns(items) {
     const summary = item.effective_status === 'success'
       ? `${item.vendor_count || 0} innovators and ${item.product_count || 0} innovations inserted`
       : item.error_message || 'No details recorded.';
-    card.innerHTML = `<div class="admin-card-header"><h4>${escapeHtml(item.effective_status || item.status || 'unknown')}</h4><span class="admin-badge ${item.effective_status === 'success' ? 'approved' : ''}">${escapeHtml(item.effective_status || item.status || 'unknown')}</span></div><p><strong>Requested By:</strong> ${escapeHtml(item.requested_by || 'Unknown')}</p><p><strong>Started:</strong> ${escapeHtml(formatDate(item.started_at || item.created_at))}</p><p><strong>Finished:</strong> ${escapeHtml(formatDate(item.finished_at))}</p><p><strong>Summary:</strong> ${escapeHtml(summary)}</p><p><strong>Error:</strong> ${escapeHtml(item.error_message || 'None')}</p>`;
+    card.innerHTML = `<div class="admin-card-header"><h4>${escapeHtml(item.effective_status || item.status || 'unknown')}</h4><span class="admin-badge ${item.effective_status === 'success' ? 'approved' : ''}">${escapeHtml(item.effective_status || item.status || 'unknown')}</span></div><p><strong>Requested By:</strong> ${escapeHtml(item.requested_by || 'Unknown')}</p><p><strong>Started:</strong> ${escapeHtml(formatDate(item.started_at || item.created_at))}</p><p><strong>Finished:</strong> ${escapeHtml(formatDate(item.finished_at))}</p><p><strong>Summary:</strong> ${escapeHtml(summary)}</p><p><strong>Error:</strong> ${escapeHtml(item.error_message || 'None')}</p><div class="btn-group"><button class="btn btn-danger btn-small" type="button" data-delete-sync-run="${escapeHtml(item.id || '')}">Delete Log</button></div>`;
+    card.querySelector('[data-delete-sync-run]')?.addEventListener('click', () => deleteInnovationSyncRun(item.id));
     innovationSyncRuns.appendChild(card);
   });
   return { hasRunning };
+}
+
+async function deleteInnovationSyncRun(runId) {
+  if (!runId) return;
+  setStatus(sessionStatus, 'Deleting sync log...');
+  try {
+    await InnovationStore.adminRequest('deleteGianSyncRun', { token: getStoredToken(), runId });
+    setStatus(sessionStatus, 'Sync log deleted.');
+    await loadInnovationSyncRuns();
+  } catch (error) {
+    setStatus(sessionStatus, error.message || 'Sync log could not be deleted.', true);
+  }
 }
 
 function getEffectiveProductTags(product) {
@@ -423,11 +436,11 @@ async function refreshSyncMonitor() {
 
 async function runInnovationSync() {
   runInnovationSyncButton.disabled = true;
-  setStatus(sessionStatus, 'Running manual new-records sync...');
+  setStatus(sessionStatus, 'Running lightweight new-records sync...');
   try {
     const data = await InnovationStore.adminRequest('syncGianDirectory', { token: getStoredToken() });
     adminState.syncPendingRefresh = true;
-    setRunningIndicator(true, 'GIAN sync finished this request and saved updates. Refreshing the admin view...');
+    setRunningIndicator(true, 'GIAN sync finished this request. Refreshing the admin view...');
     setStatus(sessionStatus, data.message || `Manual sync completed: ${data.vendorCount || 0} innovators and ${data.productCount || 0} innovations inserted.`);
     await refreshSyncMonitor();
   } catch (error) {
