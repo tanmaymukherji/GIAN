@@ -15,10 +15,13 @@ const directoryState = {
 
 const INDIA_CENTER = { lat: 22.9734, lng: 78.6569 };
 const SEARCH_STATE_KEY = 'gian_directory_search_state_v1';
+const SIX_M_OPTIONS = ['Manpower', 'Method', 'Material', 'Machine', 'Money', 'Market'];
 const searchEls = {
   supplier: document.getElementById('search-supplier'),
   product: document.getElementById('search-product'),
   location: document.getElementById('search-location'),
+  tags: document.getElementById('search-tags'),
+  sixm: document.getElementById('search-sixm'),
   keyword: document.getElementById('search-keyword'),
 };
 
@@ -34,6 +37,21 @@ const paginationEls = [
 function uniqueSortedValues(values) {
   return [...new Set(values.map((value) => String(value || '').trim()).filter(Boolean))]
     .sort((left, right) => left.localeCompare(right, undefined, { sensitivity: 'base' }));
+}
+
+function getSelectedValues(selectEl) {
+  if (!selectEl) return [];
+  return Array.from(selectEl.querySelectorAll('input[type="checkbox"]:checked'))
+    .map((input) => String(input.value || '').trim())
+    .filter(Boolean);
+}
+
+function setSelectedValues(selectEl, values) {
+  if (!selectEl) return;
+  const wanted = new Set((values || []).map((value) => String(value || '').trim()).filter(Boolean));
+  Array.from(selectEl.querySelectorAll('input[type="checkbox"]')).forEach((input) => {
+    input.checked = wanted.has(input.value);
+  });
 }
 
 function populateSelectOptions(selectEl, values, placeholder) {
@@ -61,6 +79,50 @@ function collectLocationOptions(vendors) {
   }));
 }
 
+function parseDelimitedValues(value) {
+  return String(value || '').split(/[,|]/).map((item) => item.trim()).filter(Boolean);
+}
+
+function getEffectiveProductTags(product) {
+  const reviewed = Array.isArray(product?.reviewed_tags) ? product.reviewed_tags.filter(Boolean) : [];
+  return reviewed.length ? reviewed : (Array.isArray(product?.tags) ? product.tags.filter(Boolean) : []);
+}
+
+function deriveSixMFromProduct(product) {
+  const text = [
+    product?.product_name,
+    product?.product_description,
+    product?.product_location_text,
+    ...(Array.isArray(product?.tags) ? product.tags : []),
+    ...(Array.isArray(product?.reviewed_tags) ? product.reviewed_tags : []),
+    ...(Array.isArray(product?.product_specifications) ? product.product_specifications.flatMap((spec) => [spec?.key, spec?.value]) : []),
+  ].join(' ').toLowerCase();
+  const categories = [];
+  if (/(training|trainings|capacity|skill|employment|livelihood|women|children|artisan|farmer producer)/i.test(text)) categories.push('Manpower');
+  if (/(method|process|technique|practice|variety|grafting|cultivation|design|model|system|manual|protocol)/i.test(text)) categories.push('Method');
+  if (/(clay|bamboo|wood|cow dung|fabric|fiber|material|natural cooler|weft)/i.test(text)) categories.push('Material');
+  if (/(machine|device|tool|equipment|holder|carrier|cooler|sprayer|tractor|climber|chakki|polyhouse|automated)/i.test(text)) categories.push('Machine');
+  if (/(finance|financial|credit|loan|fund|investment|cost saving|income support)/i.test(text)) categories.push('Money');
+  if (/(market|marketing|buyer|sales|sold|export|retail|portal|business|commerciali[sz]ation)/i.test(text)) categories.push('Market');
+  return uniqueSortedValues(categories);
+}
+
+function getEffectiveProductSixM(product) {
+  const reviewed = Array.isArray(product?.six_m_categories) ? product.six_m_categories.filter(Boolean) : [];
+  return reviewed.length ? reviewed : deriveSixMFromProduct(product);
+}
+
+function collectTagOptions() {
+  return uniqueSortedValues([
+    ...directoryState.vendors.flatMap((vendor) => vendor.tags || []),
+    ...directoryState.products.flatMap((product) => [
+      ...getEffectiveProductTags(product),
+      ...(product.product_categories || []),
+      ...(product.product_subcategories || []),
+    ]),
+  ]);
+}
+
 function populateFilterOptions() {
   populateSelectOptions(
     searchEls.supplier,
@@ -77,6 +139,19 @@ function populateFilterOptions() {
     collectLocationOptions(directoryState.vendors),
     'All locations'
   );
+  populateSelectOptions(
+    searchEls.tags,
+    collectTagOptions(),
+    'All tags'
+  );
+  const previousSixM = getSelectedValues(searchEls.sixm);
+  searchEls.sixm.innerHTML = SIX_M_OPTIONS.map((value) => `
+    <label class="checkbox-item">
+      <input type="checkbox" value="${esc(value)}" />
+      <span>${esc(value)}</span>
+    </label>
+  `).join('');
+  setSelectedValues(searchEls.sixm, previousSixM);
 }
 
 function esc(value) {
@@ -89,6 +164,8 @@ function persistSearchState() {
       supplier: searchEls.supplier.value,
       product: searchEls.product.value,
       location: searchEls.location.value,
+      tags: searchEls.tags.value,
+      sixm: getSelectedValues(searchEls.sixm),
       keyword: searchEls.keyword.value,
     },
     currentPage: directoryState.currentPage,
@@ -116,6 +193,8 @@ function applySearchSnapshot(snapshot) {
   searchEls.supplier.value = String(snapshot.search.supplier || '');
   searchEls.product.value = String(snapshot.search.product || '');
   searchEls.location.value = String(snapshot.search.location || '');
+  searchEls.tags.value = String(snapshot.search.tags || '');
+  setSelectedValues(searchEls.sixm, Array.isArray(snapshot.search.sixm) ? snapshot.search.sixm : []);
   searchEls.keyword.value = String(snapshot.search.keyword || '');
   directoryState.currentPage = Number(snapshot.currentPage || 1);
   directoryState.selectedVendorId = snapshot.selectedVendorId || null;
@@ -134,11 +213,12 @@ function buildVendorIndex(vendor) {
   const productNames = products.map((product) => normalizeText(product.product_name)).join(' ');
   const productDescriptions = products.map((product) => normalizeText(product.product_description)).join(' ');
   const productTags = products.flatMap((product) => [
-    ...(product.tags || []),
+    ...getEffectiveProductTags(product),
     ...(product.product_categories || []),
     ...(product.product_subcategories || []),
     ...(product.product_specifications || []).flatMap((spec) => [spec?.key, spec?.value]),
   ]).map(normalizeText).join(' ');
+  const sixm = uniqueSortedValues(products.flatMap((product) => getEffectiveProductSixM(product))).map(normalizeText);
   const locations = [
     vendor.location_text,
     vendor.city,
@@ -174,6 +254,8 @@ function buildVendorIndex(vendor) {
     supplier: normalizeText(vendor.vendor_name),
     products: productNames,
     location: locations,
+    tags: productTags,
+    sixm,
     keyword,
   };
 }
@@ -223,6 +305,17 @@ function scoreVendor(vendor, filters) {
   if (locationScore === null) return null;
   score += locationScore;
 
+  const tagScore = scoreAgainstTokens(index.tags, filters.tagTokens, 12);
+  if (tagScore === null) return null;
+  score += tagScore;
+
+  if (filters.sixmValues.length) {
+    const vendorSixM = new Set(index.sixm || []);
+    const matchedSixMCount = filters.sixmValues.filter((value) => vendorSixM.has(value)).length;
+    if (!matchedSixMCount) return null;
+    score += matchedSixMCount * 18;
+  }
+
   if (filters.keywordTokens.length) {
     if (!tokensMatchAll(index.keyword, filters.keywordTokens)) return null;
     score += filters.keywordTokens.reduce((total, token) => total + (index.supplier.includes(token) ? 20 : 8), 0);
@@ -242,15 +335,20 @@ function getFilters() {
   const supplier = normalizeText(searchEls.supplier.value);
   const product = normalizeText(searchEls.product.value);
   const location = normalizeText(searchEls.location.value);
+  const tags = normalizeText(searchEls.tags.value);
+  const sixm = getSelectedValues(searchEls.sixm).map(normalizeText).filter(Boolean);
   const keyword = normalizeText(searchEls.keyword.value);
   return {
     supplierPhrase: supplier,
     productPhrase: product,
     locationPhrase: location,
+    tagPhrase: tags,
+    sixmValues: sixm,
     keywordPhrase: keyword,
     supplierTokens: tokenize(supplier),
     productTokens: tokenize(product),
     locationTokens: tokenize(location),
+    tagTokens: tokenize(tags),
     keywordTokens: tokenize(keyword),
   };
 }
@@ -260,6 +358,8 @@ function hasAnyFilter(filters) {
     filters.supplierTokens.length ||
     filters.productTokens.length ||
     filters.locationTokens.length ||
+    filters.tagTokens.length ||
+    filters.sixmValues.length ||
     filters.keywordTokens.length
   );
 }
@@ -562,10 +662,12 @@ async function renderResults() {
     const contactLine = [vendor.final_contact_email || vendor.portal_email || 'No email', vendor.final_contact_phone || vendor.portal_phone || 'No phone'].join(' | ');
     const noteLine = vendor.contact_notes || vendor.website_status || 'GIAN details only';
     const coverageSummary = getCoverageSummary(vendor);
+    const tagPreview = uniqueSortedValues((vendor.products || []).flatMap((product) => getEffectiveProductTags(product))).slice(0, 6);
+    const sixmPreview = uniqueSortedValues((vendor.products || []).flatMap((product) => getEffectiveProductSixM(product))).slice(0, 6);
     const addressLine = vendor.final_contact_address && normalizeText(vendor.final_contact_address) !== normalizeText(coverageSummary)
       ? `<p><strong>Address:</strong> ${esc(vendor.final_contact_address)}</p>`
       : '';
-    resultsEl.insertAdjacentHTML('beforeend', `<article class="vendor-result-card" data-vendor-card="${esc(vendor.portal_vendor_id)}"><div class="vendor-result-top"><div><h4>${esc(vendor.vendor_name)}</h4><p>${esc(coverageSummary)}</p></div><span class="admin-badge approved">${esc(String(vendor.products_count || vendor.products?.length || 0))} innovations</span></div><p>${esc(vendor.about_vendor || 'No description available.')}</p>${buildResultVideo(vendor)}<p><strong>Locations:</strong> ${esc((vendor.service_locations || []).join(', ') || getPrimaryLocationLabel(vendor) || 'Not listed')}</p><p><strong>Contact:</strong> ${esc(contactLine)}</p>${addressLine}<p><strong>Enrichment:</strong> ${esc(noteLine)}</p><div><strong>Innovation Preview</strong>${buildInnovationPreview(vendor)}</div><div class="btn-group"><a class="btn btn-small" href="./vendor-detail.html?vendor=${encodeURIComponent(vendor.portal_vendor_id)}">View Details</a><a class="btn btn-warning btn-small" href="${esc(vendor.portal_vendor_link || '#')}" target="_blank" rel="noreferrer">View on GIAN</a></div></article>`);
+    resultsEl.insertAdjacentHTML('beforeend', `<article class="vendor-result-card" data-vendor-card="${esc(vendor.portal_vendor_id)}"><div class="vendor-result-top"><div><h4>${esc(vendor.vendor_name)}</h4><p>${esc(coverageSummary)}</p></div><span class="admin-badge approved">${esc(String(vendor.products_count || vendor.products?.length || 0))} innovations</span></div><p>${esc(vendor.about_vendor || 'No description available.')}</p>${buildResultVideo(vendor)}<p><strong>Locations:</strong> ${esc((vendor.service_locations || []).join(', ') || getPrimaryLocationLabel(vendor) || 'Not listed')}</p><p><strong>Tags:</strong> ${esc(tagPreview.join(', ') || 'Not listed')}</p><p><strong>6M:</strong> ${esc(sixmPreview.join(', ') || 'Not classified')}</p><p><strong>Contact:</strong> ${esc(contactLine)}</p>${addressLine}<p><strong>Enrichment:</strong> ${esc(noteLine)}</p><div><strong>Innovation Preview</strong>${buildInnovationPreview(vendor)}</div><div class="btn-group"><a class="btn btn-small" href="./vendor-detail.html?vendor=${encodeURIComponent(vendor.portal_vendor_id)}">View Details</a><a class="btn btn-warning btn-small" href="${esc(vendor.portal_vendor_link || '#')}" target="_blank" rel="noreferrer">View on GIAN</a></div></article>`);
   });
 
   const selectedVendor = directoryState.selectedVendorId && mapVendors.some((vendor) => vendor.portal_vendor_id === directoryState.selectedVendorId)
@@ -599,7 +701,10 @@ function applyFilters() {
 }
 
 function clearFilters() {
-  Object.values(searchEls).forEach((input) => { input.value = ''; });
+  [searchEls.supplier, searchEls.product, searchEls.location, searchEls.tags, searchEls.keyword].forEach((input) => {
+    if (input) input.value = '';
+  });
+  setSelectedValues(searchEls.sixm, []);
   directoryState.selectedVendorId = null;
   try { window.sessionStorage.removeItem(SEARCH_STATE_KEY); } catch {}
   applyFilters();
@@ -636,11 +741,18 @@ async function initializeDirectory() {
 
 document.getElementById('run-search').addEventListener('click', applyFilters);
 document.getElementById('clear-search').addEventListener('click', clearFilters);
-Object.values(searchEls).forEach((input) => {
+[
+  searchEls.supplier,
+  searchEls.product,
+  searchEls.location,
+  searchEls.tags,
+  searchEls.keyword,
+].forEach((input) => {
   input.addEventListener('keypress', (event) => { if (event.key === 'Enter') applyFilters(); });
   input.addEventListener('input', persistSearchState);
   input.addEventListener('change', persistSearchState);
 });
+if (searchEls.sixm) searchEls.sixm.addEventListener('change', persistSearchState);
 mapListEl.addEventListener('click', (event) => {
   if (event.target.closest('a')) return;
   const target = event.target.closest('[data-focus-vendor]');

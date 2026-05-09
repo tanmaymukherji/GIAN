@@ -17,6 +17,17 @@
         <h1>Innovation and Innovator Search</h1>
         <p class="vendor-subtitle">Search the GIAN Multimedia Database by Innovation, Innovator, Location, or Keyword</p>
       </div>
+      <div class="vendor-hero-actions vendor-hero-summary">
+        <section class="section vendor-hero-summary-card">
+          <h3>Directory Summary</h3>
+          <div class="stats-grid">
+            <div class="stat-card"><div class="stat-number" id="vendor-total-count">0</div><div>Innovators</div></div>
+            <div class="stat-card"><div class="stat-number" id="product-total-count">0</div><div>Innovations</div></div>
+            <div class="stat-card"><div class="stat-number" id="filtered-vendor-count">0</div><div>Matches</div></div>
+          </div>
+          <p class="section-note" id="directory-status">Loading GIAN directory...</p>
+        </section>
+      </div>
     </header>
 
     <main class="vendor-layout">
@@ -26,21 +37,13 @@
           <div class="form-group"><label for="search-supplier">Innovator Name</label><select id="search-supplier"><option value="">All innovators</option></select></div>
           <div class="form-group"><label for="search-product">Name of Innovation</label><select id="search-product"><option value="">All innovations</option></select></div>
           <div class="form-group"><label for="search-location">Location</label><select id="search-location"><option value="">All locations</option></select></div>
+          <div class="form-group"><label for="search-tags">Tags</label><select id="search-tags"><option value="">All tags</option></select></div>
+          <div class="form-group"><label>6M Classification</label><div id="search-sixm" class="checkbox-grid checkbox-grid-two-up"></div><p class="section-note">Select one or more 6M categories.</p></div>
           <div class="form-group"><label for="search-keyword">Keyword</label><input id="search-keyword" type="search" placeholder="Innovation details, tags, contact, media" /></div>
           <div class="btn-group">
             <button class="btn" id="run-search" type="button">Search</button>
             <button class="btn btn-danger btn-small" id="clear-search" type="button">Clear</button>
           </div>
-        </section>
-
-        <section class="section">
-          <h3>Directory Summary</h3>
-          <div class="stats-grid">
-            <div class="stat-card"><div class="stat-number" id="vendor-total-count">0</div><div>Innovators</div></div>
-            <div class="stat-card"><div class="stat-number" id="product-total-count">0</div><div>Innovations</div></div>
-            <div class="stat-card"><div class="stat-number" id="filtered-vendor-count">0</div><div>Matches</div></div>
-          </div>
-          <p class="section-note" id="directory-status">Loading GIAN directory...</p>
         </section>
       </aside>
 

@@ -28,6 +28,11 @@ const EDITABLE_VENDOR_FIELDS = [
   "about_vendor",
   "contact_notes",
 ] as const;
+const EDITABLE_PRODUCT_FIELDS = [
+  "reviewed_tags",
+  "six_m_categories",
+  "admin_notes",
+] as const;
 
 type ListingItem = {
   detailUrl: string;
@@ -644,6 +649,38 @@ async function handleUpdateGianInnovator(token: string, portalVendorId: string, 
   return jsonResponse({ ok: true, item: data });
 }
 
+async function handleUpdateGianInnovation(token: string, portalProductId: string, updates: Record<string, unknown>) {
+  const supabase = getSupabaseAdmin();
+  const session = await validateSession(token);
+  if (!session) return errorResponse("Invalid admin session.", 401);
+  if (!portalProductId) return errorResponse("Missing innovation id.", 400);
+
+  const cleanUpdates: Record<string, unknown> = {};
+  for (const field of EDITABLE_PRODUCT_FIELDS) {
+    if (!(field in updates)) continue;
+    if (field === "admin_notes") {
+      const value = requireString(updates[field]);
+      cleanUpdates[field] = value || null;
+      continue;
+    }
+    const arrayValue = Array.isArray(updates[field])
+      ? dedupe(updates[field].map((item) => requireString(item)).filter(Boolean))
+      : [];
+    cleanUpdates[field] = arrayValue;
+  }
+  if (!Object.keys(cleanUpdates).length) return errorResponse("No valid product fields were provided for update.", 400);
+
+  cleanUpdates.updated_at = new Date().toISOString();
+  const { data, error } = await supabase
+    .from("gian_innovations")
+    .update(cleanUpdates)
+    .eq("portal_product_id", portalProductId)
+    .select("*")
+    .single();
+  if (error) return errorResponse(`Innovation update failed: ${error.message}`, 500);
+  return jsonResponse({ ok: true, item: data });
+}
+
 async function getSyncState() {
   const supabase = getSupabaseAdmin();
   const { data, error } = await supabase
@@ -774,8 +811,11 @@ async function runGianSync(requestedBy: string) {
         product_categories: [],
         product_subcategories: [],
         product_specifications: productSpecifications,
-        tags: innovationTags,
-        search_text: dedupe([
+      tags: innovationTags,
+      reviewed_tags: [],
+      six_m_categories: [],
+      admin_notes: null,
+      search_text: dedupe([
           parsed.title,
           parsed.innovatorName,
           parsed.location,
@@ -939,6 +979,7 @@ Deno.serve(async (request) => {
   const password = requireString(body.password);
   const receivedCronToken = requireString(body.cronToken);
   const portalVendorId = requireString(body.portalVendorId);
+  const portalProductId = requireString(body.portalProductId);
   const updates = (body.updates && typeof body.updates === "object" && !Array.isArray(body.updates))
     ? body.updates as Record<string, unknown>
     : {};
@@ -956,6 +997,8 @@ Deno.serve(async (request) => {
       return await handleSyncGianDirectory(token);
     case "updateGianInnovator":
       return await handleUpdateGianInnovator(token, portalVendorId, updates);
+    case "updateGianInnovation":
+      return await handleUpdateGianInnovation(token, portalProductId, updates);
     case "scheduledSync":
       return await handleScheduledSync(receivedCronToken);
     default:
