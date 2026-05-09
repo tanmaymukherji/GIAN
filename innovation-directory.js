@@ -26,7 +26,6 @@ const searchEls = {
 };
 
 const resultsEl = document.getElementById('vendor-results');
-const mapListEl = document.getElementById('map-results-list');
 const statusEl = document.getElementById('directory-status');
 const resultsSummaryEl = document.getElementById('results-summary');
 const paginationEls = [
@@ -384,9 +383,6 @@ function setSelectedVendor(vendorId) {
   document.querySelectorAll('[data-vendor-card]').forEach((card) => {
     card.classList.toggle('active', card.dataset.vendorCard === vendorId);
   });
-  document.querySelectorAll('[data-focus-vendor]').forEach((item) => {
-    item.classList.toggle('active', item.dataset.focusVendor === vendorId);
-  });
 }
 
 function focusVendor(vendorId, options = {}) {
@@ -547,11 +543,6 @@ async function renderMapMarkers(vendors) {
     if (point) points.push({ vendor, point });
   }
   if (!points.length) {
-    if (!vendors.length) {
-      mapListEl.innerHTML = '<div class="vendor-map-status">No mappable coordinates were available for the current search yet.</div>';
-    } else {
-      mapListEl.insertAdjacentHTML('afterbegin', '<div class="vendor-map-status">Matching innovators are listed here, but no usable coordinates could be derived from the current data yet.</div>');
-    }
     directoryState.map?.setCenter?.(INDIA_CENTER);
     directoryState.map?.setZoom?.(4.8);
     return;
@@ -629,13 +620,11 @@ async function renderResults() {
   const mapVendors = directoryState.hasSearched ? directoryState.filteredVendors : [];
   setCounts();
   resultsEl.innerHTML = '';
-  mapListEl.innerHTML = '';
   renderPagination(totalPages, totalMatches);
 
   if (!directoryState.hasSearched) {
     resultsSummaryEl.textContent = 'Choose an innovation, innovator, location, or keyword to search the directory.';
     resultsEl.innerHTML = '<div class="vendor-empty-state">The GIAN directory is loaded and ready. Start with a filter on the left, then run the search to see matching innovators and innovations.</div>';
-    mapListEl.innerHTML = '<div class="vendor-map-status">Run a search to display matching innovator locations on the map.</div>';
     await renderMapMarkers([]);
     return;
   }
@@ -643,20 +632,11 @@ async function renderResults() {
   if (!totalMatches) {
     resultsSummaryEl.textContent = 'No innovators matched the current filters.';
     resultsEl.innerHTML = '<div class="vendor-empty-state">No innovators match this combination yet. Try a shorter keyword, a broader location, or remove one filter at a time.</div>';
-    mapListEl.innerHTML = '<div class="vendor-map-status">No map results for the current search.</div>';
     await renderMapMarkers([]);
     return;
   }
 
   resultsSummaryEl.textContent = `${totalMatches} innovator result${totalMatches === 1 ? '' : 's'} found. Page ${directoryState.currentPage} of ${totalPages}.`;
-
-  mapVendors.forEach((vendor, index) => {
-    const coverageSummary = getCoverageSummary(vendor);
-    const secondaryLine = vendor.final_contact_address && normalizeText(vendor.final_contact_address) !== normalizeText(coverageSummary)
-      ? vendor.final_contact_address
-      : vendor.final_contact_email || vendor.final_contact_phone || 'Contact details on detail page';
-    mapListEl.insertAdjacentHTML('beforeend', `<div class="vendor-map-list-item" data-focus-vendor="${esc(vendor.portal_vendor_id)}"><span class="vendor-flag">${index + 1}</span><span><strong>${esc(vendor.vendor_name)}</strong><br /><small>${esc(coverageSummary)}</small><br /><small>${esc(secondaryLine)}</small></span><div class="btn-group"><a class="btn btn-small" href="./vendor-detail.html?vendor=${encodeURIComponent(vendor.portal_vendor_id)}">View Details</a><a class="btn btn-warning btn-small" href="${esc(vendor.portal_vendor_link || '#')}" target="_blank" rel="noreferrer">View on GIAN</a></div></div>`);
-  });
 
   pageVendors.forEach((vendor) => {
     const contactLine = [vendor.final_contact_email || vendor.portal_email || 'No email', vendor.final_contact_phone || vendor.portal_phone || 'No phone'].join(' | ');
@@ -753,11 +733,6 @@ document.getElementById('clear-search').addEventListener('click', clearFilters);
   input.addEventListener('change', persistSearchState);
 });
 if (searchEls.sixm) searchEls.sixm.addEventListener('change', persistSearchState);
-mapListEl.addEventListener('click', (event) => {
-  if (event.target.closest('a')) return;
-  const target = event.target.closest('[data-focus-vendor]');
-  if (target) focusVendor(target.dataset.focusVendor);
-});
 resultsEl.addEventListener('click', (event) => {
   if (event.target.closest('a')) return;
   const target = event.target.closest('[data-vendor-card]');
