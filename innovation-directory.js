@@ -533,6 +533,75 @@ function buildMarkerHtml(isRingMarker) {
   return `<div style="position:relative;width:${size}px;height:${size}px;border-radius:999px;background:#f28c28;border:${border}px solid #fff;box-shadow:0 0 0 ${halo}px rgba(242,140,40,.18),0 8px 18px rgba(176,92,16,.28);"></div>`;
 }
 
+function getBoundsZoom(spanLat, spanLng) {
+  const span = Math.max(spanLat, spanLng);
+  if (span <= 0.04) return 11;
+  if (span <= 0.1) return 10;
+  if (span <= 0.25) return 9;
+  if (span <= 0.6) return 8;
+  if (span <= 1.4) return 7;
+  if (span <= 3.2) return 6;
+  if (span <= 7) return 5.4;
+  return 4.8;
+}
+
+function fitMapToPoints(points) {
+  if (!points.length) {
+    directoryState.map?.setCenter?.(INDIA_CENTER);
+    directoryState.map?.setZoom?.(4.8);
+    return;
+  }
+  const validPoints = points.filter(({ point }) => Number.isFinite(point?.lat) && Number.isFinite(point?.lng));
+  const indiaPoints = validPoints.filter(({ point }) => point.lat >= 6 && point.lat <= 38 && point.lng >= 68 && point.lng <= 98);
+  const activePoints = indiaPoints.length ? indiaPoints : validPoints;
+  if (!activePoints.length) {
+    directoryState.map?.setCenter?.(INDIA_CENTER);
+    directoryState.map?.setZoom?.(4.8);
+    return;
+  }
+  const lats = activePoints.map(({ point }) => Number(point.lat));
+  const lngs = activePoints.map(({ point }) => Number(point.lng));
+  const minLat = Math.min(...lats);
+  const maxLat = Math.max(...lats);
+  const minLng = Math.min(...lngs);
+  const maxLng = Math.max(...lngs);
+  const center = {
+    lat: (minLat + maxLat) / 2,
+    lng: (minLng + maxLng) / 2,
+  };
+  const spanLat = Math.abs(maxLat - minLat);
+  const spanLng = Math.abs(maxLng - minLng);
+  if (spanLat < 0.0005 && spanLng < 0.0005) {
+    directoryState.map?.setCenter?.(center);
+    directoryState.map?.setZoom?.(8.5);
+    return;
+  }
+  const boundsArray = [[minLng, minLat], [maxLng, maxLat]];
+  const boundsObjects = [{ lat: minLat, lng: minLng }, { lat: maxLat, lng: maxLng }];
+  const options = { padding: 56, maxZoom: 8.5, duration: 0 };
+  try {
+    if (typeof directoryState.map?.fitBounds === 'function') {
+      directoryState.map.fitBounds(boundsArray, options);
+      return;
+    }
+  } catch {}
+  try {
+    if (typeof directoryState.map?.fitBounds === 'function') {
+      directoryState.map.fitBounds(boundsObjects, options);
+      return;
+    }
+  } catch {}
+  try {
+    if (window.mappls?.LngLatBounds && typeof directoryState.map?.fitBounds === 'function') {
+      const bounds = new window.mappls.LngLatBounds(boundsArray[0], boundsArray[1]);
+      directoryState.map.fitBounds(bounds, options);
+      return;
+    }
+  } catch {}
+  directoryState.map?.setCenter?.(center);
+  directoryState.map?.setZoom?.(getBoundsZoom(spanLat, spanLng));
+}
+
 async function renderMapMarkers(vendors) {
   const ready = await ensureMap();
   if (!ready) return;
@@ -543,8 +612,7 @@ async function renderMapMarkers(vendors) {
     if (point) points.push({ vendor, point });
   }
   if (!points.length) {
-    directoryState.map?.setCenter?.(INDIA_CENTER);
-    directoryState.map?.setZoom?.(4.8);
+    fitMapToPoints([]);
     return;
   }
   const groupedPoints = groupMapPoints(points);
@@ -573,12 +641,7 @@ async function renderMapMarkers(vendors) {
       directoryState.markers.push(marker);
     });
   });
-  const indiaPoints = points.filter(({ point }) => point.lat >= 6 && point.lat <= 38 && point.lng >= 68 && point.lng <= 98);
-  const first = indiaPoints[0]?.point || points[0]?.point;
-  if (first) {
-    directoryState.map?.setCenter?.(first);
-    directoryState.map?.setZoom?.(5.5);
-  }
+  fitMapToPoints(points);
 }
 
 function renderPagination(totalPages, totalMatches) {
